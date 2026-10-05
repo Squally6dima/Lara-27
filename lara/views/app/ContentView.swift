@@ -14,8 +14,8 @@ private enum LaraTab: Hashable, CaseIterable {
 
     var icon: String {
         switch self {
-        case .exploit: return "star.fill"
-        case .tweaks: return "wand.and.stars"
+        case .exploit: return "wrench.and.screwdriver.fill"
+        case .tweaks: return "ladybug.fill"
         case .fileManager: return "folder.fill"
         case .settings: return "gearshape.fill"
         }
@@ -28,7 +28,7 @@ struct ContentView: View {
     @State private var selectedTab: LaraTab = .exploit
 
     private var tabs: [LaraTab] {
-        showFMInTabs ? LaraTab.allCases : [.exploit, .tweaks, .settings]
+        showFMInTabs ? [.exploit, .tweaks, .fileManager] : [.exploit, .tweaks]
     }
 
     var body: some View {
@@ -41,9 +41,9 @@ struct ContentView: View {
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             LaraTabBar(selectedTab: $selectedTab, tabs: tabs)
-                .padding(.horizontal, 14)
+                .padding(.horizontal, 12)
                 .padding(.top, 8)
-                .padding(.bottom, 6)
+                .padding(.bottom, 5)
         }
         .preferredColorScheme(.dark)
         .onChange(of: showFMInTabs) { visible in
@@ -74,43 +74,58 @@ private struct LaraTabBar: View {
     let tabs: [LaraTab]
 
     var body: some View {
-        HStack(spacing: 3) {
+        HStack(spacing: 4) {
             ForEach(tabs, id: \.self) { tab in
                 Button {
                     withAnimation(.easeInOut(duration: 0.18)) {
                         selectedTab = tab
                     }
                 } label: {
-                    VStack(spacing: 3) {
-                        Image(systemName: tab.icon)
-                            .font(.system(size: 16, weight: .semibold))
-                        Text(tab.title)
-                            .font(.system(size: 9, weight: .medium))
-                    }
-                    .foregroundStyle(selectedTab == tab ? LaraPalette.accent : LaraPalette.primary.opacity(0.88))
-                    .frame(maxWidth: .infinity)
-                    .frame(height: LaraMetrics.tabBarHeight)
-                    .background {
-                        if selectedTab == tab {
-                            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                                .fill(LaraPalette.elevated)
+                    Image(systemName: tab.icon)
+                        .font(.system(size: 25, weight: .semibold))
+                        .foregroundStyle(
+                            selectedTab == tab
+                                ? LaraPalette.accent
+                                : LaraPalette.primary.opacity(0.94)
+                        )
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 58)
+                        .background {
+                            if selectedTab == tab {
+                                Capsule()
+                                    .fill(Color.white.opacity(0.15))
+                                    .allowsHitTesting(false)
+                            }
                         }
-                    }
+                        .contentShape(Rectangle())
                 }
-                .buttonStyle(LaraPressableStyle())
+                .buttonStyle(.plain)
+                .contentShape(Rectangle())
+                .accessibilityLabel(tab.title)
+                .zIndex(1)
             }
         }
-        .padding(4)
-        .background(.ultraThinMaterial, in: Capsule())
-        .overlay(
-            Capsule()
-                .fill(Color.white.opacity(0.035))
-        )
-        .overlay(
-            Capsule()
-                .stroke(Color.white.opacity(0.10), lineWidth: 0.7)
-        )
-        .shadow(color: .black.opacity(0.30), radius: 18, y: 8)
+        .padding(7)
+        .frame(height: 72)
+        .contentShape(Capsule())
+        .modifier(LaraLiquidGlassBar())
+    }
+}
+
+private struct LaraLiquidGlassBar: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(iOS 26.0, *) {
+            content
+                .glassEffect(.regular.interactive(), in: Capsule())
+        } else {
+            content
+                .background(.ultraThinMaterial, in: Capsule())
+                .overlay {
+                    Capsule()
+                        .stroke(Color.white.opacity(0.12), lineWidth: 0.7)
+                        .allowsHitTesting(false)
+                }
+        }
     }
 }
 
@@ -398,15 +413,24 @@ struct ExploitView: View {
             .navigationTitle("lara")
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
+                ToolbarItemGroup(placement: .navigationBarTrailing) {
                     Button {
                         mgr.showLogs = true
                     } label: {
                         Image(systemName: "terminal")
                             .font(.system(size: 15, weight: .medium))
-                            .foregroundStyle(LaraPalette.accent)
                     }
                     .accessibilityLabel("Open logs")
+
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.18)) {
+                            selectedTab = .settings
+                        }
+                    } label: {
+                        Image(systemName: "gearshape.fill")
+                            .font(.system(size: 15, weight: .medium))
+                    }
+                    .accessibilityLabel("Settings")
                 }
             }
         }
