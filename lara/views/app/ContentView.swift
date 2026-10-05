@@ -28,7 +28,7 @@ struct ContentView: View {
     @State private var selectedTab: LaraTab = .exploit
 
     private var tabs: [LaraTab] {
-        showFMInTabs ? [.exploit, .tweaks, .fileManager] : [.exploit, .tweaks]
+        showFMInTabs ? LaraTab.allCases : [.exploit, .tweaks, .settings]
     }
 
     var body: some View {
@@ -72,17 +72,35 @@ struct ContentView: View {
 private struct LaraTabBar: View {
     @Binding var selectedTab: LaraTab
     let tabs: [LaraTab]
+    @Namespace private var glassNamespace
 
     var body: some View {
+        Group {
+            if #available(iOS 26.0, *) {
+                GlassEffectContainer(spacing: 4) {
+                    tabButtons
+                }
+            } else {
+                tabButtons
+            }
+        }
+        .padding(7)
+        .frame(height: 72)
+        .contentShape(Capsule())
+        .modifier(LaraLiquidGlassBar())
+    }
+
+    @ViewBuilder
+    private var tabButtons: some View {
         HStack(spacing: 4) {
             ForEach(tabs, id: \.self) { tab in
                 Button {
-                    withAnimation(.easeInOut(duration: 0.18)) {
+                    withAnimation(.easeInOut(duration: 0.28)) {
                         selectedTab = tab
                     }
                 } label: {
                     Image(systemName: tab.icon)
-                        .font(.system(size: 25, weight: .semibold))
+                        .font(.system(size: 24, weight: .semibold))
                         .foregroundStyle(
                             selectedTab == tab
                                 ? LaraPalette.accent
@@ -92,9 +110,17 @@ private struct LaraTabBar: View {
                         .frame(height: 58)
                         .background {
                             if selectedTab == tab {
-                                Capsule()
-                                    .fill(Color.white.opacity(0.15))
-                                    .allowsHitTesting(false)
+                                if #available(iOS 26.0, *) {
+                                    Capsule()
+                                        .glassEffect(.regular.interactive(), in: Capsule())
+                                        .glassEffectID("lara-active-tab", in: glassNamespace)
+                                        .glassEffectTransition(.matchedGeometry)
+                                        .allowsHitTesting(false)
+                                } else {
+                                    Capsule()
+                                        .fill(Color.white.opacity(0.15))
+                                        .allowsHitTesting(false)
+                                }
                             }
                         }
                         .contentShape(Rectangle())
@@ -102,13 +128,9 @@ private struct LaraTabBar: View {
                 .buttonStyle(.plain)
                 .contentShape(Rectangle())
                 .accessibilityLabel(tab.title)
-                .zIndex(1)
+                .zIndex(selectedTab == tab ? 2 : 1)
             }
         }
-        .padding(7)
-        .frame(height: 72)
-        .contentShape(Capsule())
-        .modifier(LaraLiquidGlassBar())
     }
 }
 
@@ -414,7 +436,7 @@ struct ExploitView: View {
             .navigationTitle("lara")
             .navigationBarTitleDisplayMode(.large)
             .toolbar {
-                ToolbarItemGroup(placement: .navigationBarTrailing) {
+                ToolbarItem(placement: .navigationBarTrailing) {
                     Button {
                         mgr.showLogs = true
                     } label: {
@@ -422,16 +444,6 @@ struct ExploitView: View {
                             .font(.system(size: 15, weight: .medium))
                     }
                     .accessibilityLabel("Open logs")
-
-                    Button {
-                        withAnimation(.easeInOut(duration: 0.18)) {
-                            selectedTab = .settings
-                        }
-                    } label: {
-                        Image(systemName: "gearshape.fill")
-                            .font(.system(size: 15, weight: .medium))
-                    }
-                    .accessibilityLabel("Settings")
                 }
             }
         }
