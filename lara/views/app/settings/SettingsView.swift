@@ -170,7 +170,7 @@ struct SettingsView: View {
                             mgr.stashKRWToLaunchd { success in
                                 stashingKRWNow = false
                                 if success {
-                                    Alertinator.shared.alert(title: "KRW Stashed", body: "KRW primitives were successfully stashed to launchd.", actionLabel: "OK")
+                                    Alertinator.shared.alert(title: "KRW Stashed", body: "KRW primitives were successfully stashed to launchd.", actionLabel: "OK", action: {})
                                 } else {
                                     Alertinator.shared.alert(title: "Failed to Stash KRW", body: mgr.rcLastError ?? "Please try again.", actionLabel: "OK")
                                 }
