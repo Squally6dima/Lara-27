@@ -1,5 +1,43 @@
 import SwiftUI
 
+// Existing PartyUI metrics are intentionally preserved because other UI components
+// depend on these names. The Lara palette/components below are presentation-only.
+
+public enum cornerRad {
+    public static var component: CGFloat {
+        if #available(iOS 19.0, *) { return 18 } else { return 12 }
+    }
+    public static var platter: CGFloat {
+        if #available(iOS 19.0, *) { return 26 } else { return 18 }
+    }
+    public static var sPlatter: CGFloat {
+        if #available(iOS 19.0, *) { return 16 } else { return 12 }
+    }
+    public static var terminal: CGFloat {
+        if #available(iOS 19.0, *) { return 24 } else { return 18 }
+    }
+}
+
+public enum spacing {
+    public static var creditCell: CGFloat {
+        if #available(iOS 19.0, *) { return 14 } else { return 16 }
+    }
+}
+
+public enum width {
+    public static var headerIcon: CGFloat {
+        if #available(iOS 19.0, *) { return 24 } else { return 22 }
+    }
+}
+
+public extension EdgeInsets {
+    static let sectionInsets = EdgeInsets(top: 6, leading: 15, bottom: 6, trailing: 15)
+}
+
+public extension Animation {
+    static let iconUpdate = Animation.spring(response: 0.3, dampingFraction: 1.5)
+}
+
 // MARK: - Lara visual system
 
 public enum LaraPalette {
@@ -134,15 +172,12 @@ public struct LaraPrimaryButton: View {
         Button(action: action) {
             HStack(spacing: 8) {
                 if loading {
-                    ProgressView()
-                        .tint(.white)
-                        .scaleEffect(0.78)
+                    ProgressView().tint(.white).scaleEffect(0.78)
                 } else if let icon {
                     Image(systemName: icon)
                         .font(.system(size: 14, weight: .semibold))
                 }
-                Text(title)
-                    .font(.laraBodySemibold)
+                Text(title).font(.laraBodySemibold)
             }
             .frame(maxWidth: .infinity)
             .frame(height: 46)
@@ -174,11 +209,9 @@ public struct LaraSecondaryButton: View {
         Button(action: action) {
             HStack(spacing: 8) {
                 if let icon {
-                    Image(systemName: icon)
-                        .font(.system(size: 14, weight: .medium))
+                    Image(systemName: icon).font(.system(size: 14, weight: .medium))
                 }
-                Text(title)
-                    .font(.laraBody)
+                Text(title).font(.laraBody)
             }
             .frame(maxWidth: .infinity)
             .frame(height: 46)
@@ -209,8 +242,7 @@ public struct LaraRow<Accessory: View>: View {
     public var body: some View {
         HStack(spacing: 12) {
             ZStack {
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(iconColor.opacity(0.14))
+                RoundedRectangle(cornerRadius: 8, style: .continuous).fill(iconColor.opacity(0.14))
                 Image(systemName: icon)
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(iconColor)
@@ -218,9 +250,7 @@ public struct LaraRow<Accessory: View>: View {
             .frame(width: 34, height: 34)
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .font(.laraBody)
-                    .foregroundStyle(LaraPalette.primary)
+                Text(title).font(.laraBody).foregroundStyle(LaraPalette.primary)
                 if let subtitle {
                     Text(subtitle)
                         .font(.laraCaption)
@@ -239,7 +269,6 @@ public struct LaraRow<Accessory: View>: View {
 
 public struct LaraSectionTitle: View {
     let title: String
-
     public init(_ title: String) { self.title = title }
 
     public var body: some View {
@@ -285,8 +314,7 @@ public struct LaraIconBadge: View {
 
     public var body: some View {
         ZStack {
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(color.opacity(0.12))
+            RoundedRectangle(cornerRadius: 8, style: .continuous).fill(color.opacity(0.12))
             Image(systemName: icon)
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(color)
