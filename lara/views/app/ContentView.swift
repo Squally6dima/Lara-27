@@ -73,177 +73,124 @@ private struct LaraTabBar: View {
     @Binding var selectedTab: LaraTab
     let tabs: [LaraTab]
 
-    @State private var dragTranslation: CGFloat = 0
-    @State private var dragStartIndex = 0
+    @Namespace private var glassNamespace
     @State private var isDragging = false
-    @State private var dragTargetIndex: Int? = nil
-
-    private let horizontalPadding: CGFloat = 7
-    private let spacing: CGFloat = 4
+    @State private var dragStartIndex = 0
 
     var body: some View {
         GeometryReader { geometry in
             let slotWidth = slotWidth(for: geometry.size.width)
-            let step = slotWidth + spacing
-            let selectedIndex = tabs.firstIndex(of: selectedTab) ?? 0
-            let activeIndex = dragTargetIndex ?? selectedIndex
 
-            ZStack(alignment: .leading) {
-                // One outer glass surface for the whole navigation layer.
-                Capsule()
-                    .fill(Color.clear)
-                    .glassOrMaterial(isOuterBar: true)
-                    .allowsHitTesting(false)
-
-                // The moving glass "lens" belongs UNDER the symbols.
-                // This prevents the icons from being refracted into a bright white blob.
-                if !tabs.isEmpty {
-                    Capsule()
-                        .fill(Color.clear)
-                        .frame(width: slotWidth, height: 58)
-                        .glassOrMaterial(isOuterBar: false)
-                        .overlay {
+            Group {
+                if #available(iOS 26.0, *) {
+                    GlassEffectContainer(spacing: 10) {
+                        ZStack {
+                            // The navigation bar itself is one glass surface.
                             Capsule()
-                                .stroke(
-                                    Color.white.opacity(isDragging ? 0.14 : 0.07),
-                                    lineWidth: 0.7
-                                )
+                                .glassEffect(.regular, in: Capsule())
                                 .allowsHitTesting(false)
-                        }
-                        .scaleEffect(
-                            x: isDragging ? 1.0 + min(abs(dragTranslation) / 720.0, 0.06) : 1,
-                            y: isDragging ? 0.985 : 1
-                        )
-                        .offset(
-                            x: indicatorX(
-                                startIndex: isDragging ? dragStartIndex : selectedIndex,
-                                dragTranslation: isDragging ? dragTranslation : 0,
-                                step: step
-                            ) + horizontalPadding,
-                            y: 0
-                        )
-                        .animation(
-                            .interactiveSpring(response: 0.28, dampingFraction: 0.84),
-                            value: dragTranslation
-                        )
-                        .animation(
-                            .interactiveSpring(response: 0.30, dampingFraction: 0.84),
-                            value: selectedTab
-                        )
-                        .allowsHitTesting(false)
-                        .zIndex(1)
-                }
 
-                // Symbols stay visually above the glass, like the system navigation layer.
-                HStack(spacing: spacing) {
-                    ForEach(tabs, id: \.self) { tab in
-                        Button {
-                            guard !isDragging else { return }
-                            withAnimation(.interactiveSpring(response: 0.30, dampingFraction: 0.84)) {
-                                selectedTab = tab
-                            }
-                        } label: {
-                            Image(systemName: tab.icon)
-                                .font(.system(size: 24, weight: .semibold))
-                                .foregroundStyle(
-                                    activeIndex == (tabs.firstIndex(of: tab) ?? 0)
-                                        ? LaraPalette.accent
-                                        : LaraPalette.primary.opacity(0.96)
-                                )
-                                .frame(width: slotWidth, height: 58)
-                                .contentShape(Rectangle())
+                            tabButtons(slotWidth: slotWidth)
                         }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel(tab.title)
+                    }
+                } else {
+                    ZStack {
+                        Capsule()
+                            .fill(.ultraThinMaterial)
+                            .overlay {
+                                Capsule()
+                                    .stroke(Color.white.opacity(0.10), lineWidth: 0.7)
+                                    .allowsHitTesting(false)
+                            }
+
+                        tabButtons(slotWidth: slotWidth)
                     }
                 }
-                .padding(.horizontal, horizontalPadding)
-                .zIndex(2)
             }
+            .padding(7)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            // Simultaneous gesture keeps the buttons tappable while allowing the glass
-            // lens to be grabbed from anywhere on the tab bar and dragged between tabs.
+            .contentShape(Capsule())
             .simultaneousGesture(
-                DragGesture(minimumDistance: 4, coordinateSpace: .local)
+                DragGesture(minimumDistance: 6, coordinateSpace: .local)
                     .onChanged { value in
-                        let selected = tabs.firstIndex(of: selectedTab) ?? 0
+                        guard tabs.count > 1 else { return }
 
                         if !isDragging {
-                            dragStartIndex = selected
-                            dragTargetIndex = selected
+                            dragStartIndex = tabs.firstIndex(of: selectedTab) ?? 0
                             isDragging = true
                         }
 
-                        dragTranslation = value.translation.width
-
-                        let rawIndex = CGFloat(dragStartIndex) + (value.translation.width / step)
+                        let totalWidth = geometry.size.width
+                        let usable = max(totalWidth - 14, 1)
+                        let step = usable / CGFloat(tabs.count)
+                        let raw = CGFloat(dragStartIndex) + (value.translation.width / step)
                         let target = min(
-                            max(Int(rawIndex.rounded()), 0),
-                            max(tabs.count - 1, 0)
-                        )
-                        dragTargetIndex = target
-                    }
-                    .onEnded { value in
-                        guard !tabs.isEmpty else {
-                            isDragging = false
-                            dragTranslation = 0
-                            dragTargetIndex = nil
-                            return
-                        }
-
-                        let rawIndex = CGFloat(dragStartIndex) + (value.translation.width / step)
-                        let target = min(
-                            max(Int(rawIndex.rounded()), 0),
+                            max(Int(raw.rounded()), 0),
                             tabs.count - 1
                         )
 
-                        withAnimation(.interactiveSpring(response: 0.32, dampingFraction: 0.84)) {
-                            selectedTab = tabs[target]
-                            dragTranslation = 0
+                        let targetTab = tabs[target]
+                        if targetTab != selectedTab {
+                            withAnimation(.interactiveSpring(response: 0.32, dampingFraction: 0.82)) {
+                                selectedTab = targetTab
+                            }
                         }
-
-                        dragTargetIndex = nil
+                    }
+                    .onEnded { _ in
                         isDragging = false
                     }
             )
         }
         .frame(height: 72)
-        .padding(7)
+    }
+
+    @ViewBuilder
+    private func tabButtons(slotWidth: CGFloat) -> some View {
+        HStack(spacing: 0) {
+            ForEach(tabs, id: \.self) { tab in
+                Button {
+                    withAnimation(.interactiveSpring(response: 0.32, dampingFraction: 0.82)) {
+                        selectedTab = tab
+                    }
+                } label: {
+                    ZStack {
+                        // The actual Liquid Glass lens is attached to the selected
+                        // control, not to a separate white-filled overlay.
+                        if selectedTab == tab {
+                            if #available(iOS 26.0, *) {
+                                Capsule()
+                                    .glassEffect(.clear.interactive(), in: Capsule())
+                                    .glassEffectID("selected-tab", in: glassNamespace)
+                                    .glassEffectTransition(.matchedGeometry)
+                                    .allowsHitTesting(false)
+                            } else {
+                                Capsule()
+                                    .fill(Color.white.opacity(0.13))
+                                    .allowsHitTesting(false)
+                            }
+                        }
+
+                        Image(systemName: tab.icon)
+                            .font(.system(size: 24, weight: .semibold))
+                            .foregroundStyle(
+                                selectedTab == tab
+                                    ? LaraPalette.accent
+                                    : LaraPalette.primary.opacity(0.96)
+                            )
+                    }
+                    .frame(width: slotWidth, height: 58)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(tab.title)
+            }
+        }
+        .padding(.horizontal, 7)
     }
 
     private func slotWidth(for totalWidth: CGFloat) -> CGFloat {
-        let contentWidth = max(0, totalWidth - (horizontalPadding * 2))
-        return max(
-            1,
-            (contentWidth - (spacing * CGFloat(max(tabs.count - 1, 0)))) / CGFloat(max(tabs.count, 1))
-        )
-    }
-
-    private func indicatorX(startIndex: Int, dragTranslation: CGFloat, step: CGFloat) -> CGFloat {
-        let raw = CGFloat(startIndex) * step + dragTranslation
-        let maxX = CGFloat(max(tabs.count - 1, 0)) * step
-        return min(max(raw, 0), maxX)
-    }
-}
-
-private extension View {
-    @ViewBuilder
-    func glassOrMaterial(isOuterBar: Bool) -> some View {
-        if #available(iOS 26.0, *) {
-            if isOuterBar {
-                self.glassEffect(.regular, in: Capsule())
-            } else {
-                // Regular + interactive is used for the movable lens. Because it is
-                // behind the symbols, their bright glyphs no longer get sampled into it.
-                self.glassEffect(.regular.interactive(), in: Capsule())
-            }
-        } else {
-            if isOuterBar {
-                self.background(.ultraThinMaterial, in: Capsule())
-            } else {
-                self.background(.thinMaterial, in: Capsule())
-            }
-        }
+        let usable = max(totalWidth - 14, 1)
+        return usable / CGFloat(max(tabs.count, 1))
     }
 }
 
