@@ -57,7 +57,7 @@ struct ContentView: View {
     private var tabContent: some View {
         switch selectedTab {
         case .exploit:
-            ExploitView()
+            ExploitView(selectedTab: $selectedTab)
         case .tweaks:
             TweaksView(mgr: mgr)
         case .fileManager:
@@ -131,6 +131,7 @@ private struct LaraLiquidGlassBar: ViewModifier {
 
 struct ExploitView: View {
     @EnvironmentObject private var mgr: laramgr
+    @Binding var selectedTab: LaraTab
     @AppStorage("selectedMethod") private var selectedMethod: method = .hybrid
     @State private var fetchingKernelcache = false
     @State private var showPanicAlert = false
