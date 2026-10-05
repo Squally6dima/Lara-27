@@ -107,7 +107,6 @@ struct LogsView: View {
         }
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
-        .presentationBackground(LaraPalette.background)
         .preferredColorScheme(.dark)
     }
 }
