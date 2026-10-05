@@ -1,6 +1,6 @@
 import SwiftUI
 
-private enum LaraTab: Hashable, CaseIterable {
+enum LaraTab: Hashable, CaseIterable {
     case exploit, tweaks, fileManager, settings
 
     var title: String {
