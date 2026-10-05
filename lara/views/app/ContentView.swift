@@ -1,348 +1,443 @@
-//
-//  ContentView.swift
-//  lara
-//
-//  Created by ruter on 23.03.26.
-//
-
 import SwiftUI
-import UniformTypeIdentifiers
+
+private enum LaraTab: Hashable, CaseIterable {
+    case exploit, tweaks, fileManager, settings
+
+    var title: String {
+        switch self {
+        case .exploit: return "Exploit"
+        case .tweaks: return "Tweaks"
+        case .fileManager: return "Files"
+        case .settings: return "Settings"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .exploit: return "star.fill"
+        case .tweaks: return "wand.and.stars"
+        case .fileManager: return "folder.fill"
+        case .settings: return "gearshape.fill"
+        }
+    }
+}
 
 struct ContentView: View {
     @EnvironmentObject private var mgr: laramgr
-    @ObservedObject private var logger = globallogger
-    @AppStorage("selectedMethod") private var selectedmethod: method = .hybrid
-    @AppStorage("logsdisplaymode") private var selectedlogsdisplaymode: logsdisplaymode = .toolbar
-    @AppStorage("loggerNoBS") private var loggernobs: Bool = true
-    
-    @State private var showSettings: Bool = false
-    @State private var dlingkcache: Bool = false
-    
-    init() {
-        globallogger.capture()
+    @AppStorage("showFMInTabs") private var showFMInTabs: Bool = true
+    @State private var selectedTab: LaraTab = .exploit
+
+    private var tabs: [LaraTab] {
+        showFMInTabs ? LaraTab.allCases : [.exploit, .tweaks, .settings]
     }
-    
+
     var body: some View {
-        NavigationStack {
-            List {
-                AlertsSection
-                KRWSection
-                RCSection
-                ActionsSection
-                DebugSection
-                InlineLogsSection
-            }
-            .navigationTitle("lara")
-            .toolbar {
-                if selectedlogsdisplaymode == .toolbar {
-                    Button(action: {
-                        mgr.showLogs.toggle()
-                    }) {
-                        Image(systemName: "terminal")
-                    }
-                }
-                Button(action: {
-                    showSettings.toggle()
-                }) {
-                    Image(systemName: "gear")
-                }
-            }
-            .sheet(isPresented: $showSettings) {
-                SettingsView()
-            }
-        }
-    }
-    
-    private var AlertsSection: some View {
-        Section {
-            if !mgr.hasOffsets {
-                PlainAlert(title: "No offsets found!", icon: "exclamationmark.triangle.fill", text: "Kernelcache offsets are missing. Click \"Run Exploit\" and then fetch the offsets.")
-            }
-        }
-    }
-    
-    private var KRWSection: some View {
-        Section {
-            LabeledContent(content: {
-                if mgr.dsready {
-                    Image(systemName: "checkmark.circle")
-                } else if mgr.dsrunning {
-                    HStack {
-                        Text("\(Int(mgr.dsprogress * 100))%")
-                        ProgressView()
-                    }
-                } else if mgr.dsattempted && mgr.dsfailed {
-                    Image(systemName: "xmark.circle")
-                }
-            }) {
-                Button("Run Exploit", action: {
-                    offsets_init()
-                    mgr.run()
-                })
-                .disabled(mgr.dsready || mgr.dsrunning || isdebugged())
-            }
-            
-            if !mgr.hasOffsets {
-                Button {
-                    guard !dlingkcache else { return }
-                    dlingkcache = true
+        ZStack(alignment: .bottom) {
+            LaraPalette.background
+                .ignoresSafeArea()
 
-                    DispatchQueue.global(qos: .userInitiated).async {
-                        let fetched = fetchkcache()
-
-                        if fetched {
-                            let dlkc = dlkcache()
-                            DispatchQueue.main.async {
-                                mgr.hasOffsets = dlkc
-                                dlingkcache = false
-                            }
-                            return
-                        }
-
-                        DispatchQueue.main.async {
-                            mgr.hasOffsets = false
-                            dlingkcache = false
-                        }
-                    }
-                } label: {
-                    if dlingkcache {
-                        HStack {
-                            Text("Fetching Kernelcache...")
-                            Spacer()
-                            ProgressView()
-                        }
-                    } else {
-                        Text("Fetch Kernelcache")
-                    }
-                }
-                .disabled(dlingkcache || !mgr.dsready)
-            } else {
-                if selectedmethod == .hybrid {
-                    LabeledContent(content: {
-                        if mgr.vfsready && mgr.sbxready {
-                            Image(systemName: "checkmark.circle")
-                        } else if mgr.vfsrunning || mgr.sbxrunning {
-                            HStack {
-                                Text("Running...")
-                                ProgressView()
-                            }
-                        } else if (mgr.vfsattempted && mgr.vfsfailed) || (mgr.sbxattempted && mgr.sbxfailed) {
-                            Image(systemName: "xmark.circle")
-                        }
-                    }) {
-                        Button("Initialize System", action: {
-                            mgr.vfsinit()
-                            mgr.sbxescape()
-                        })
-                        .disabled(!mgr.hasOffsets || !mgr.dsready || mgr.vfsrunning || mgr.sbxrunning || (mgr.vfsready && mgr.sbxready))
-                    }
-                }
-                
-                // initalize vfs
-                if selectedmethod == .vfs {
-                    LabeledContent(content: {
-                        if mgr.vfsready {
-                            Image(systemName: "checkmark.circle")
-                        } else if mgr.vfsrunning {
-                            HStack {
-                                Text("\(Int(mgr.dsprogress * 100))%")
-                                ProgressView()
-                            }
-                        } else if mgr.vfsattempted && mgr.vfsfailed {
-                            Image(systemName: "xmark.circle")
-                        }
-                    }) {
-                        Button("Initialize VFS", action: {
-                            mgr.vfsinit()
-                        })
-                        .disabled(!mgr.dsready || mgr.vfsready || mgr.vfsrunning || isdebugged())
-                    }
-                }
-                
-                // escape sandbox
-                if selectedmethod == .sbx {
-                    LabeledContent(content: {
-                        if mgr.sbxready {
-                            Image(systemName: "checkmark.circle")
-                        } else if mgr.sbxrunning {
-                            HStack {
-                                Text("Running...")
-                                ProgressView()
-                            }
-                        } else if mgr.sbxattempted && mgr.sbxfailed {
-                            Image(systemName: "xmark.circle")
-                        }
-                    }) {
-                        Button("Escape Sandbox", action: {
-                            mgr.sbxescape()
-                        })
-                        .disabled(!mgr.dsready || mgr.sbxready || mgr.sbxrunning || isdebugged())
-                    }
-                }
-            }
-        } header: {
-            HeaderLabel(text: "Kernel Read Write", icon: "externaldrive")
-        } footer: {
-            if isdebugged() {
-                Text("Not available while a debugger is attached.")
-            }
+            tabContent
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-    }
-    
-    private var RCSection: some View {
-        Group {
-            #if !DISABLE_REMOTECALL
-            Section {
-                // init remotecall
-                LabeledContent(content: {
-                    if mgr.rcready {
-                        Image(systemName: "checkmark.circle")
-                    } else if mgr.rcrunning {
-                        HStack {
-                            Text("Running...")
-                            ProgressView()
-                        }
-                    } else if mgr.rcfailed {
-                        Image(systemName: "xmark.circle")
-                    }
-                }) {
-                    Button("Initalize RemoteCall", action: {
-                        mgr.rcinit(process: "SpringBoard", migbypass: false) { success in
-                            if success {
-                                mgr.logmsg("rc init succeeded!")
-                                let pid = mgr.rccall(name: "getpid")
-                                mgr.logmsg("remote getpid() returned: \(pid)")
-                            } else {
-                                mgr.logmsg("rc init failed")
-                                mgr.rcfailed = true
-                            }
-                        }
-                    })
-                    .disabled(!mgr.dsready || isdebugged() || mgr.rcrunning || mgr.rcready)
-                }
-                
-                // destroy remotecall
-                if mgr.rcready {
-                    Button("Destroy Remotecall", action: {
-                        mgr.rcdestroy()
-                    })
-                }
-            } header: {
-                HeaderLabel(text: "RemoteCall", icon: "syringe")
-            } footer: {
-                VStack(alignment: .leading, spacing: 4) {
-                    if let error = mgr.rcLastError ?? mgr.sbProc?.lastError {
-                        Text("Error: \(error)")
-                            .foregroundColor(.red)
-                    }
-                    if RemoteCall.isLiveContainerRuntime() && !RemoteCall.isLiveProcessRuntime() {
-                        Text("RemoteCall needs a PAC-enabled LiveContainer launch context. The main exploit may still work when RemoteCall is unavailable.")
-                    }
-                    if isdebugged() {
-                        Text("Not available when a debugger is attached.")
-                    }
-                    Text("RemoteCall is relatively unstable and may not work properly.")
-                    if isIOS16() {
-                        Text("iOS 16 tip: Open Control Center after tapping Initialize RemoteCall. This significantly improves the success rate and speed.")
-                            .fontWeight(.semibold)
-                            .foregroundColor(.orange)
-                        Text("If initialization fails after about 2 minutes, respring, relaunch Lara, and try again.")
-                            .fontWeight(.semibold)
-                            .foregroundColor(.red)
-                    }
-                }
-                .font(.footnote)
-            }
-            #endif
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            LaraTabBar(selectedTab: $selectedTab, tabs: tabs)
+                .padding(.horizontal, 14)
+                .padding(.top, 8)
+                .padding(.bottom, 6)
+                .background(LaraPalette.background.opacity(0.96))
         }
-    }
-    
-    private var ActionsSection: some View {
-        Section(header: HeaderLabel(text: "Actions", icon: "wrench.and.screwdriver")) {
-            Button("Respring", action: {
-                mgr.respring()
-            })
-            
-            Button("Panic!", action: {
-                mgr.panic()
-            })
-            
-            if isdebugged() {
-                Button("Detach Debugger", action: {
-                    exit(0)
-                })
-            }
-        }
-    }
-    
-    private var DebugSection: some View {
-        Group {
-            if weonadebugbuild_pjbweouttahereexclamationmark {
-                if mgr.dsready {
-                    Section(header: HeaderLabel(text: "Debug Only", icon: "ant")) {
-                        LabeledContent("kernel_base") {
-                            Text(String(format: "0x%llx", mgr.kernbase))
-                                .font(.system(.body, design: .monospaced))
-                                .foregroundColor(.secondary)
-                        }
-                        LabeledContent("kernel_slide") {
-                            Text(String(format: "0x%llx", mgr.kernslide))
-                                .font(.system(.body, design: .monospaced))
-                                .foregroundColor(.secondary)
-                        }
-                    }
-                }
+        .preferredColorScheme(.dark)
+        .onChange(of: showFMInTabs) { visible in
+            if !visible, selectedTab == .fileManager {
+                selectedTab = .exploit
             }
         }
     }
 
     @ViewBuilder
-    private var InlineLogsSection: some View {
-        if selectedlogsdisplaymode == .content {
-            Section {
-                ScrollView {
-                    if loggernobs {
-                        let combined = logger.logs.joined(separator: "\n")
-                        Text(combined)
-                            .font(.system(size: 13, design: .monospaced))
-                            .lineSpacing(1)
-                            .textSelection(.enabled)
-                            .onTapGesture {
-                                UIPasteboard.general.string = combined
-                                UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                            }
-                    } else {
-                        ForEach(Array(logger.logs.enumerated()), id: \.offset) { _, log in
-                            Text(log)
-                                .font(.system(size: 13, design: .monospaced))
-                                .lineSpacing(1)
-                                .textSelection(.enabled)
-                                .onTapGesture {
-                                    UIPasteboard.general.string = log
-                                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                                }
-                        }
-                    }
-                }
-                .frame(height: 250)
-                
-                Button("Copy All") {
-                    UIPasteboard.general.string = logger.logs.joined(separator: "\n\n")
-                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                }
-                
-                Button("Clear") {
-                    logger.clear()
-                }
-                .foregroundColor(.red)
-            } header: {
-                HeaderLabel(text: "Logs", icon: "terminal")
-            }
+    private var tabContent: some View {
+        switch selectedTab {
+        case .exploit:
+            ExploitView()
+        case .tweaks:
+            TweaksView(mgr: mgr)
+        case .fileManager:
+            SantanderView(startPath: "/")
+                .background(LaraPalette.background)
+        case .settings:
+            LaraSettingsTabView()
         }
     }
 }
 
-#Preview {
-    ContentView()
-        .environmentObject(laramgr())
+private struct LaraTabBar: View {
+    @Binding var selectedTab: LaraTab
+    let tabs: [LaraTab]
+
+    var body: some View {
+        HStack(spacing: 3) {
+            ForEach(tabs, id: \.self) { tab in
+                Button {
+                    withAnimation(.easeInOut(duration: 0.18)) {
+                        selectedTab = tab
+                    }
+                } label: {
+                    VStack(spacing: 3) {
+                        Image(systemName: tab.icon)
+                            .font(.system(size: 16, weight: .semibold))
+                        Text(tab.title)
+                            .font(.system(size: 9, weight: .medium))
+                    }
+                    .foregroundStyle(selectedTab == tab ? LaraPalette.accent : LaraPalette.primary.opacity(0.88))
+                    .frame(maxWidth: .infinity)
+                    .frame(height: LaraMetrics.tabBarHeight)
+                    .background {
+                        if selectedTab == tab {
+                            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                .fill(LaraPalette.elevated)
+                        }
+                    }
+                }
+                .buttonStyle(LaraPressableStyle())
+            }
+        }
+        .padding(4)
+        .background(.ultraThinMaterial.opacity(0.95))
+        .background(LaraPalette.card)
+        .clipShape(Capsule())
+        .overlay(Capsule().stroke(Color.white.opacity(0.07), lineWidth: 0.5))
+    }
+}
+
+struct ExploitView: View {
+    @EnvironmentObject private var mgr: laramgr
+    @AppStorage("selectedMethod") private var selectedMethod: method = .hybrid
+    @State private var fetchingKernelcache = false
+    @State private var showPanicAlert = false
+
+    private var kernelStatusTitle: String {
+        if mgr.dsrunning { return "Running" }
+        if mgr.dsready { return "Active" }
+        if mgr.hasOffsets { return "Offsets loaded" }
+        return "Not ready"
+    }
+
+    private var kernelStatusColor: Color {
+        if mgr.dsrunning { return LaraPalette.warning }
+        if mgr.dsready { return LaraPalette.success }
+        if mgr.hasOffsets { return LaraPalette.accent }
+        return LaraPalette.secondary
+    }
+
+    private var systemReady: Bool {
+        switch selectedMethod {
+        case .hybrid: return mgr.vfsready && mgr.sbxready
+        case .vfs: return mgr.vfsready
+        case .sbx: return mgr.sbxready
+        }
+    }
+
+    private var systemStatus: String {
+        switch selectedMethod {
+        case .hybrid:
+            if mgr.vfsready && mgr.sbxready { return "System ready" }
+            if mgr.vfsrunning || mgr.sbxrunning { return "Initializing" }
+            return "Not initialized"
+        case .vfs:
+            if mgr.vfsready { return "VFS ready" }
+            if mgr.vfsrunning { return "Initializing" }
+            return "Not initialized"
+        case .sbx:
+            if mgr.sbxready { return "Sandbox ready" }
+            if mgr.sbxrunning { return "Initializing" }
+            return "Not initialized"
+        }
+    }
+
+    var body: some View {
+        NavigationStack {
+            ScrollView(showsIndicators: false) {
+                VStack(alignment: .leading, spacing: 14) {
+                    if !mgr.hasOffsets {
+                        LaraCard {
+                            HStack(alignment: .top, spacing: 12) {
+                                LaraIconBadge(icon: "exclamationmark.triangle.fill", color: LaraPalette.warning)
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text("Kernelcache offsets missing")
+                                        .font(.laraBodySemibold)
+                                        .foregroundStyle(LaraPalette.primary)
+                                    Text("Run the exploit, then fetch the kernelcache if offsets are unavailable.")
+                                        .font(.laraCaption)
+                                        .foregroundStyle(LaraPalette.secondary)
+                                }
+                                Spacer(minLength: 0)
+                            }
+                            .padding(14)
+                        }
+                    }
+
+                    LaraCard {
+                        VStack(alignment: .leading, spacing: 0) {
+                            LaraCardHeader(
+                                icon: "cpu.fill",
+                                title: "Kernel / Exploit",
+                                trailing: AnyView(
+                                    LaraStatusPill(
+                                        title: kernelStatusTitle,
+                                        color: kernelStatusColor,
+                                        icon: mgr.dsready ? "checkmark.circle.fill" : "circle.fill",
+                                        spinning: mgr.dsrunning
+                                    )
+                                )
+                            )
+                            .padding(.horizontal, 16)
+                            .padding(.top, 14)
+
+                            VStack(spacing: 8) {
+                                LaraPrimaryButton(
+                                    title: mgr.dsrunning ? "Running Exploit…" : "Run Exploit",
+                                    icon: "bolt.fill",
+                                    loading: mgr.dsrunning,
+                                    disabled: mgr.dsrunning || mgr.dsready || isdebugged()
+                                ) {
+                                    offsets_init()
+                                    mgr.run()
+                                }
+
+                                LaraSecondaryButton(
+                                    title: fetchingKernelcache ? "Fetching Kernelcache…" : "Fetch Kernelcache",
+                                    icon: "arrow.down.circle",
+                                    disabled: fetchingKernelcache || !mgr.dsready
+                                ) {
+                                    fetchKernelcache()
+                                }
+                            }
+                            .padding(16)
+
+                            if mgr.dsrunning {
+                                ProgressView(value: mgr.dsprogress)
+                                    .tint(LaraPalette.accent)
+                                    .padding(.horizontal, 16)
+                                    .padding(.bottom, 14)
+                            }
+                        }
+                    }
+
+                    LaraCard {
+                        VStack(alignment: .leading, spacing: 0) {
+                            LaraCardHeader(
+                                icon: "externaldrive.fill",
+                                title: "System Access",
+                                trailing: AnyView(
+                                    LaraStatusPill(
+                                        title: systemStatus,
+                                        color: systemReady ? LaraPalette.success : (mgr.vfsrunning || mgr.sbxrunning ? LaraPalette.warning : LaraPalette.secondary),
+                                        icon: systemReady ? "checkmark.circle.fill" : "circle.fill",
+                                        spinning: mgr.vfsrunning || mgr.sbxrunning
+                                    )
+                                )
+                            )
+                            .padding(.horizontal, 16)
+                            .padding(.top, 14)
+
+                            VStack(spacing: 8) {
+                                LaraPrimaryButton(
+                                    title: selectedMethod == .hybrid ? "Initialize System" : selectedMethod == .vfs ? "Initialize VFS" : "Escape Sandbox",
+                                    icon: "play.fill",
+                                    loading: mgr.vfsrunning || mgr.sbxrunning,
+                                    disabled: !mgr.dsready || !mgr.hasOffsets || systemReady || mgr.vfsrunning || mgr.sbxrunning || isdebugged()
+                                ) {
+                                    initializeSystem()
+                                }
+
+                                HStack(spacing: 8) {
+                                    Image(systemName: "info.circle")
+                                        .font(.system(size: 12, weight: .semibold))
+                                        .foregroundStyle(LaraPalette.secondary)
+                                    Text("Mode: \(selectedMethod.rawValue). Change it in Settings.")
+                                        .font(.laraCaption)
+                                        .foregroundStyle(LaraPalette.secondary)
+                                }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.top, 2)
+                            }
+                            .padding(16)
+                        }
+                    }
+
+                    #if !DISABLE_REMOTECALL
+                    LaraCard {
+                        VStack(alignment: .leading, spacing: 0) {
+                            LaraCardHeader(
+                                icon: "network",
+                                title: "RemoteCall",
+                                trailing: AnyView(
+                                    LaraStatusPill(
+                                        title: mgr.rcready ? "Active" : (mgr.rcrunning ? "Running" : "Inactive"),
+                                        color: mgr.rcready ? LaraPalette.success : (mgr.rcrunning ? LaraPalette.warning : LaraPalette.secondary),
+                                        icon: mgr.rcready ? "checkmark.circle.fill" : "circle.fill",
+                                        spinning: mgr.rcrunning
+                                    )
+                                )
+                            )
+                            .padding(.horizontal, 16)
+                            .padding(.top, 14)
+
+                            VStack(spacing: 8) {
+                                LaraPrimaryButton(
+                                    title: mgr.rcready ? "RemoteCall Active" : "Initialize RemoteCall",
+                                    icon: mgr.rcready ? "checkmark.circle.fill" : "play.fill",
+                                    disabled: !mgr.dsready || mgr.rcrunning || mgr.rcready || isdebugged()
+                                ) {
+                                    mgr.rcinit(process: "SpringBoard", migbypass: false) { success in
+                                        if success {
+                                            mgr.logmsg("rc init succeeded!")
+                                            let pid = mgr.rccall(name: "getpid")
+                                            mgr.logmsg("remote getpid() returned: \(pid)")
+                                        } else {
+                                            mgr.logmsg("rc init failed")
+                                            mgr.rcfailed = true
+                                        }
+                                    }
+                                }
+
+                                if mgr.rcready {
+                                    LaraSecondaryButton(
+                                        title: "Destroy RemoteCall",
+                                        icon: "xmark.circle",
+                                        destructive: true
+                                    ) {
+                                        mgr.rcdestroy()
+                                    }
+                                }
+
+                                if let error = mgr.rcLastError, !error.isEmpty {
+                                    Text(error)
+                                        .font(.laraCaption)
+                                        .foregroundStyle(LaraPalette.destructive)
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                }
+
+                                Text("RemoteCall is relatively unstable and may not work properly.")
+                                    .font(.laraCaption)
+                                    .foregroundStyle(LaraPalette.secondary)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                            .padding(16)
+                        }
+                    }
+                    #endif
+
+                    LaraCard {
+                        VStack(alignment: .leading, spacing: 0) {
+                            LaraCardHeader(icon: "wrench.and.screwdriver.fill", title: "Actions")
+                                .padding(.horizontal, 16)
+                                .padding(.top, 14)
+
+                            Button {
+                                mgr.respring()
+                            } label: {
+                                LaraRow(icon: "arrow.counterclockwise", iconColor: LaraPalette.accent, title: "Respring", subtitle: "Restart SpringBoard") {
+                                    Image(systemName: "chevron.right")
+                                        .font(.system(size: 11, weight: .semibold))
+                                        .foregroundStyle(LaraPalette.secondary.opacity(0.5))
+                                }
+                            }
+                            .buttonStyle(LaraPressableStyle())
+
+                            LaraDivider()
+
+                            Button {
+                                showPanicAlert = true
+                            } label: {
+                                LaraRow(icon: "bolt.trianglebadge.exclamationmark", iconColor: LaraPalette.destructive, title: "Panic", subtitle: "Force a kernel panic and restart the device") {
+                                    Image(systemName: "chevron.right")
+                                        .font(.system(size: 11, weight: .semibold))
+                                        .foregroundStyle(LaraPalette.secondary.opacity(0.5))
+                                }
+                            }
+                            .buttonStyle(LaraPressableStyle())
+                        }
+                        .padding(.bottom, 3)
+                    }
+
+                    #if DEBUG
+                    if weonadebugbuild_pjbweouttahereexclamationmark && mgr.dsready {
+                        LaraCard {
+                            VStack(alignment: .leading, spacing: 10) {
+                                LaraCardHeader(icon: "ladybug.fill", title: "Debug")
+                                HStack {
+                                    Text("kernel_base")
+                                    Spacer()
+                                    Text(String(format: "0x%llx", mgr.kernbase))
+                                }
+                                HStack {
+                                    Text("kernel_slide")
+                                    Spacer()
+                                    Text(String(format: "0x%llx", mgr.kernslide))
+                                }
+                            }
+                            .font(.laraMono)
+                            .foregroundStyle(LaraPalette.secondary)
+                            .padding(16)
+                        }
+                    }
+                    #endif
+
+                    Color.clear.frame(height: 18)
+                }
+                .padding(.horizontal, LaraMetrics.horizontalPadding)
+                .padding(.top, 8)
+            }
+            .background(LaraPalette.background)
+            .navigationTitle("lara")
+            .navigationBarTitleDisplayMode(.large)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button {
+                        mgr.showLogs = true
+                    } label: {
+                        Image(systemName: "terminal")
+                            .font(.system(size: 15, weight: .medium))
+                            .foregroundStyle(LaraPalette.accent)
+                    }
+                    .accessibilityLabel("Open logs")
+                }
+            }
+        }
+        .alert("Force Kernel Panic", isPresented: $showPanicAlert) {
+            Button("Cancel", role: .cancel) {}
+            Button("Panic", role: .destructive) {
+                mgr.panic()
+            }
+        } message: {
+            Text("This will immediately force a kernel panic. Your device will restart.")
+        }
+    }
+
+    private func initializeSystem() {
+        switch selectedMethod {
+        case .hybrid:
+            mgr.vfsinit()
+            mgr.sbxescape()
+        case .vfs:
+            mgr.vfsinit()
+        case .sbx:
+            mgr.sbxescape()
+        }
+    }
+
+    private func fetchKernelcache() {
+        guard !fetchingKernelcache else { return }
+        fetchingKernelcache = true
+
+        DispatchQueue.global(qos: .userInitiated).async {
+            let fetched = fetchkcache()
+            let loaded = fetched ? dlkcache() : false
+            DispatchQueue.main.async {
+                mgr.hasOffsets = loaded
+                fetchingKernelcache = false
+            }
+        }
+    }
 }
