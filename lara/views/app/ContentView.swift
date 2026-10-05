@@ -44,7 +44,6 @@ struct ContentView: View {
                 .padding(.horizontal, 14)
                 .padding(.top, 8)
                 .padding(.bottom, 6)
-                .background(LaraPalette.background.opacity(0.96))
         }
         .preferredColorScheme(.dark)
         .onChange(of: showFMInTabs) { visible in
@@ -102,10 +101,16 @@ private struct LaraTabBar: View {
             }
         }
         .padding(4)
-        .background(.ultraThinMaterial.opacity(0.95))
-        .background(LaraPalette.card)
-        .clipShape(Capsule())
-        .overlay(Capsule().stroke(Color.white.opacity(0.07), lineWidth: 0.5))
+        .background(.ultraThinMaterial, in: Capsule())
+        .overlay(
+            Capsule()
+                .fill(Color.white.opacity(0.035))
+        )
+        .overlay(
+            Capsule()
+                .stroke(Color.white.opacity(0.10), lineWidth: 0.7)
+        )
+        .shadow(color: .black.opacity(0.30), radius: 18, y: 8)
     }
 }
 
