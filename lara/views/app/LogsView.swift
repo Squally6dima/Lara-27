@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct LogsView: View {
     @ObservedObject var logger: Logger
