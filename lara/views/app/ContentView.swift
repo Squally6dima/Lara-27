@@ -72,73 +72,158 @@ struct ContentView: View {
 private struct LaraTabBar: View {
     @Binding var selectedTab: LaraTab
     let tabs: [LaraTab]
+
     @Namespace private var glassNamespace
+    @State private var dragTranslation: CGFloat = 0
+    @State private var dragStartIndex = 0
+    @State private var isDragging = false
+    @State private var dragTargetIndex: Int? = nil
+
+    private let horizontalPadding: CGFloat = 7
+    private let spacing: CGFloat = 4
 
     var body: some View {
-        Group {
-            if #available(iOS 26.0, *) {
-                GlassEffectContainer(spacing: 4) {
-                    tabButtons
+        GeometryReader { geometry in
+            let slotWidth = slotWidth(for: geometry.size.width)
+            let step = slotWidth + spacing
+            let selectedIndex = tabs.firstIndex(of: selectedTab) ?? 0
+            let activeIndex = dragTargetIndex ?? selectedIndex
+
+            ZStack(alignment: .leading) {
+                HStack(spacing: spacing) {
+                    ForEach(tabs, id: \.self) { tab in
+                        Button {
+                            guard !isDragging else { return }
+                            withAnimation(.easeInOut(duration: 0.22)) {
+                                selectedTab = tab
+                            }
+                        } label: {
+                            Image(systemName: tab.icon)
+                                .font(.system(size: 24, weight: .semibold))
+                                .foregroundStyle(
+                                    activeIndex == (tabs.firstIndex(of: tab) ?? 0)
+                                        ? LaraPalette.accent
+                                        : LaraPalette.primary.opacity(0.94)
+                                )
+                                .frame(width: slotWidth, height: 58)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(tab.title)
+                    }
                 }
-            } else {
-                tabButtons
+                .padding(.horizontal, horizontalPadding)
+
+                if !tabs.isEmpty {
+                    Capsule()
+                        .fill(Color.clear)
+                        .frame(width: slotWidth, height: 58)
+                        .background {
+                            if #available(iOS 26.0, *) {
+                                Capsule()
+                                    .glassEffect(.regular.interactive(), in: Capsule())
+                                    .glassEffectID("lara-tab-glass", in: glassNamespace)
+                                    .allowsHitTesting(false)
+                            } else {
+                                Capsule()
+                                    .fill(Color.white.opacity(0.14))
+                                    .allowsHitTesting(false)
+                            }
+                        }
+                        .overlay {
+                            Capsule()
+                                .stroke(Color.white.opacity(isDragging ? 0.16 : 0.08), lineWidth: 0.7)
+                                .allowsHitTesting(false)
+                        }
+                        .scaleEffect(
+                            x: isDragging ? 1.0 + min(abs(dragTranslation) / 700.0, 0.075) : 1,
+                            y: isDragging ? 0.98 : 1
+                        )
+                        .offset(
+                            x: indicatorX(
+                                startIndex: isDragging ? dragStartIndex : selectedIndex,
+                                dragTranslation: isDragging ? dragTranslation : 0,
+                                step: step
+                            ) + horizontalPadding,
+                            y: 0
+                        )
+                        .animation(.interactiveSpring(response: 0.28, dampingFraction: 0.82), value: dragTranslation)
+                        .animation(.easeInOut(duration: 0.22), value: selectedTab)
+                        .allowsHitTesting(false)
+
+                    // The gesture target sits exactly on top of the glass lens,
+                    // so the lens can be grabbed and dragged without disabling tab taps.
+                    Capsule()
+                        .fill(Color.clear)
+                        .frame(width: slotWidth, height: 58)
+                        .contentShape(Capsule())
+                        .offset(
+                            x: indicatorX(
+                                startIndex: isDragging ? dragStartIndex : selectedIndex,
+                                dragTranslation: isDragging ? dragTranslation : 0,
+                                step: step
+                            ) + horizontalPadding
+                        )
+                        .gesture(
+                            DragGesture(minimumDistance: 2, coordinateSpace: .local)
+                                .onChanged { value in
+                                    let selected = tabs.firstIndex(of: selectedTab) ?? 0
+                                    if !isDragging {
+                                        dragStartIndex = selected
+                                        dragTargetIndex = selected
+                                        isDragging = true
+                                    }
+
+                                    dragTranslation = value.translation.width
+
+                                    let rawIndex = CGFloat(dragStartIndex) + (value.translation.width / step)
+                                    let target = min(max(Int(rawIndex.rounded()), 0), tabs.count - 1)
+                                    dragTargetIndex = target
+                                }
+                                .onEnded { value in
+                                    let rawIndex = CGFloat(dragStartIndex) + (value.translation.width / step)
+                                    let target = min(max(Int(rawIndex.rounded()), 0), tabs.count - 1)
+                                    let targetTab = tabs[target]
+
+                                    withAnimation(.interactiveSpring(response: 0.30, dampingFraction: 0.82)) {
+                                        selectedTab = targetTab
+                                        dragTranslation = 0
+                                    }
+
+                                    dragTargetIndex = nil
+                                    isDragging = false
+                                }
+                        )
+                        .accessibilityHidden(true)
+                }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .padding(7)
         }
-        .padding(7)
         .frame(height: 72)
         .contentShape(Capsule())
         .modifier(LaraLiquidGlassBar())
     }
 
-    @ViewBuilder
-    private var tabButtons: some View {
-        HStack(spacing: 4) {
-            ForEach(tabs, id: \.self) { tab in
-                Button {
-                    withAnimation(.easeInOut(duration: 0.28)) {
-                        selectedTab = tab
-                    }
-                } label: {
-                    Image(systemName: tab.icon)
-                        .font(.system(size: 24, weight: .semibold))
-                        .foregroundStyle(
-                            selectedTab == tab
-                                ? LaraPalette.accent
-                                : LaraPalette.primary.opacity(0.94)
-                        )
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 58)
-                        .background {
-                            if selectedTab == tab {
-                                if #available(iOS 26.0, *) {
-                                    Capsule()
-                                        .glassEffect(.regular.interactive(), in: Capsule())
-                                        .glassEffectID("lara-active-tab", in: glassNamespace)
-                                        .glassEffectTransition(.matchedGeometry)
-                                        .allowsHitTesting(false)
-                                } else {
-                                    Capsule()
-                                        .fill(Color.white.opacity(0.15))
-                                        .allowsHitTesting(false)
-                                }
-                            }
-                        }
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .contentShape(Rectangle())
-                .accessibilityLabel(tab.title)
-                .zIndex(selectedTab == tab ? 2 : 1)
-            }
-        }
+    private func slotWidth(for totalWidth: CGFloat) -> CGFloat {
+        let contentWidth = max(0, totalWidth - (horizontalPadding * 2))
+        return max(1, (contentWidth - (spacing * CGFloat(max(tabs.count - 1, 0)))) / CGFloat(max(tabs.count, 1)))
+    }
+
+    private func indicatorX(startIndex: Int, dragTranslation: CGFloat, step: CGFloat) -> CGFloat {
+        let raw = CGFloat(startIndex) * step + dragTranslation
+        let maxX = CGFloat(max(tabs.count - 1, 0)) * step
+        return min(max(raw, 0), maxX)
     }
 }
 
 private struct LaraLiquidGlassBar: ViewModifier {
     func body(content: Content) -> some View {
         if #available(iOS 26.0, *) {
-            content
-                .glassEffect(.regular.interactive(), in: Capsule())
+            GlassEffectContainer(spacing: 4) {
+                content
+            }
+            .glassEffect(.regular.interactive(), in: Capsule())
         } else {
             content
                 .background(.ultraThinMaterial, in: Capsule())
